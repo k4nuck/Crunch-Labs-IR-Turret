@@ -1,0 +1,19 @@
+# Build artifacts
+build/
+*.elf
+*.eep
+*.hex
+*.bin
+*.map
+
+# VS Code local settings (kept at workspace root)
+.vscode/
+
+# OS/editor junk
+.DS_Store
+*.swp
+*.swo
+.idea/
+
+# PlatformIO (if ever used)
+.pio/
