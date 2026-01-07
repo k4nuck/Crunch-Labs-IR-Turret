@@ -57,6 +57,23 @@ If you see sync errors, try the old bootloader variant:
 arduino-cli upload -p /dev/ttyUSB0 --fqbn arduino:avr:nano:cpu=atmega328old sketches/IR_Turret_Custom
 ```
 
+### Makefile shortcuts
+```bash
+# Default port/fqbn
+make build
+make upload
+
+# Old bootloader
+make upload-old
+
+# Monitor (uses CrunchLabs-Monitor if available, else picocom)
+make monitor
+make monitor-raw
+
+# Override port/fqbn on the fly
+make upload PORT=/dev/ttyUSB1 FQBN=arduino:avr:nano:cpu=atmega328old
+```
+
 ## Serial Monitoring
 Preferred: use the CrunchLabs wrapper around `picocom`.
 
