@@ -102,8 +102,14 @@ int rollPrecision = 158; // this variable represents the time in milliseconds th
 int pitchMax = 150; // this sets the maximum angle of the pitch servo to prevent it from crashing, it should remain below 180, and be greater than the pitchMin
 int pitchMin = 33; // this sets the minimum angle of the pitch servo to prevent it from crashing, it should remain above 0, and be less than the pitchMax
 
+static int SonarEnabled = 0; //set to 1 to enable sonar sensor functionality, 0 to disable
+
 void shakeHeadYes(int moves = 3); //function prototypes for shakeHeadYes and No for proper compiling
 void shakeHeadNo(int moves = 3);
+
+#define TRIG_PIN 2
+#define ECHO_PIN 3
+
 #pragma endregion PINS AND PARAMS
 
 //////////////////////////////////////////////////
@@ -128,6 +134,12 @@ void setup() { //this is our setup function - it runs once on start up, and is b
     Serial.println(F("at pin 9"));
 
     homeServos(); //set servo motors to home position
+
+    //Setup Sonar Sensor
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
+
+    digitalWrite(TRIG_PIN, LOW);
 }
 #pragma endregion SETUP
 
@@ -136,8 +148,27 @@ void setup() { //this is our setup function - it runs once on start up, and is b
 //////////////////////////////////////////////////
 #pragma region LOOP
 
+/****
+ * The loop function runs over and over again forever
+ */
 void loop() {
 
+    //function to handle incoming IR commands
+    handleIRCommands(); 
+
+    // Function to handle Sonar Sensor
+    handleSonarSensor();
+   
+}
+
+#pragma endregion LOOP
+
+//////////////////////////////////////////////////
+               // FUNCTIONS  //
+//////////////////////////////////////////////////
+#pragma region FUNCTIONS
+
+void handleIRCommands(){
     /*
     * Check if received data is available and if yes, try to decode it.
     */
@@ -208,17 +239,57 @@ void loop() {
               shakeHeadNo(3);
               break;
 
+            case hashtag:
+              if (SonarEnabled == 0){
+                  SonarEnabled = 1;
+                  Serial.println("Sonar Enabled");
+              }else{
+                  SonarEnabled = 0;
+                  Serial.println("Sonar Disabled");
+              }
+              break;
+
         }
     }
     delay(5);
-}
+} //function prototype for handling IR commands
 
-#pragma endregion LOOP
+void handleSonarSensor(){
 
-//////////////////////////////////////////////////
-               // FUNCTIONS  //
-//////////////////////////////////////////////////
-#pragma region FUNCTIONS
+    if (SonarEnabled == 0){
+        return; //skip the sonar code if it's not enabled
+    }
+
+    int static lastDistanceInches = -1;
+
+    // Trigger the sonar sensor to send a pulse
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+
+
+    // Read the echo pin to get the duration of the returned pulse
+    unsigned long duration = pulseIn(ECHO_PIN, HIGH, 17857); // Timeout after ~17.86ms (approx. 75 inches)
+
+    if (duration == 0) {
+        //Serial.println("Out of range");
+        return; // No echo received within the timeout period
+    }
+
+    // Calculate distance in inches
+    long distanceInches = duration * 0.0134 / 2; // Speed of sound is ~0.0134 inches/us
+    if (distanceInches != lastDistanceInches){
+        // Print the distance to the Serial Monitor
+        Serial.print("Distance: ");
+        Serial.print(distanceInches);
+        Serial.println(" inches");
+        lastDistanceInches = distanceInches;
+    }
+
+    delay(100); // Small delay before the next measurement
+} //function prototype for handling Sonar Sensor
 
 void leftMove(int moves){ // function to move left
     for (int i = 0; i < moves; i++){

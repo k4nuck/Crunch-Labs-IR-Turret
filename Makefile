@@ -5,7 +5,33 @@ SKETCH := sketches/IR_Turret_Custom
 MONITOR_CMD := CrunchLabs-Monitor
 MONITOR_FALLBACK := picocom -b 9600 $(PORT)
 
-.PHONY: build upload upload-old monitor monitor-raw board-list kill-monitor port-list port-check port-status
+.PHONY: help build upload upload-old monitor monitor-raw board-list kill-monitor port-list port-check port-status
+
+help:
+	@echo "CrunchLabs IR Turret — Makefile commands"
+	@echo ""
+	@echo "BUILD & UPLOAD:"
+	@echo "  make build           Compile sketch (default FQBN: $(FQBN))"
+	@echo "  make upload          Kill monitor, compile, upload to $(PORT)"
+	@echo "  make upload-old      Upload using old bootloader (atmega328old)"
+	@echo ""
+	@echo "MONITORING & DEBUGGING:"
+	@echo "  make monitor         Start serial monitor (CrunchLabs-Monitor or picocom)"
+	@echo "  make monitor-raw     Start picocom directly at 9600 baud"
+	@echo "  make kill-monitor    Terminate any process holding $(PORT)"
+	@echo ""
+	@echo "SERIAL PORT HELPERS:"
+	@echo "  make port-list       List all /dev/ttyACM* and /dev/ttyUSB* devices"
+	@echo "  make port-status     Check if $(PORT) is FREE or BUSY (no fail)"
+	@echo "  make port-check      Check if $(PORT) is FREE (exits non-zero if BUSY)"
+	@echo ""
+	@echo "BOARD INFO:"
+	@echo "  make board-list      List detected Arduino boards"
+	@echo ""
+	@echo "OVERRIDE DEFAULTS:"
+	@echo "  make upload PORT=/dev/ttyACM0"
+	@echo "  make upload FQBN=arduino:avr:nano:cpu=atmega328old"
+	@echo ""
 
 build:
 	arduino-cli compile --fqbn $(FQBN) $(SKETCH)
