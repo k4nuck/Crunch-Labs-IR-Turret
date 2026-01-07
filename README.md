@@ -100,6 +100,7 @@ picocom -b 9600 /dev/ttyUSB0
 ## VS Code Notes
 - Workspace-level IntelliSense is configured under `~/projects/CrunchLabs/.vscode/` so `.ino` files resolve `Arduino.h`, `Servo.h`, and `IRremote.hpp`.
 - Open the top-level `CrunchLabs.code-workspace` for consistent settings across CrunchLabs projects.
+- Arduino extension: workspace settings point to snap `arduino-cli`; this repo’s `.vscode/arduino.json` carries the sketch/board/port specifics.
 
 ## Troubleshooting
 - Port busy (/dev/ttyUSB0):

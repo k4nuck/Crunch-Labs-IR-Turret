@@ -1,0 +1,8 @@
+{
+  "board": "arduino:avr:nano",
+  "port": "/dev/ttyUSB0",
+  "sketch": "sketches/IR_Turret_Custom/IR_Turret_Custom.ino",
+  "output": "build",
+  "configuration": "default",
+  "programmer": ""
+}
