@@ -57,6 +57,23 @@ If you see sync errors, try the old bootloader variant:
 arduino-cli upload -p /dev/ttyUSB0 --fqbn arduino:avr:nano:cpu=atmega328old sketches/IR_Turret_Custom
 ```
 
+### Quick Serial Port Check
+Before uploading, confirm the right port and that it’s free.
+
+```bash
+# 1) Find the device (common Arduino ports)
+ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null
+
+# 2) Check if it’s free (no output means free)
+fuser -v /dev/ttyUSB0
+
+# Optional: alternate checker
+lsof /dev/ttyUSB0
+
+# Handy one‑liner (auto-detect first matching port)
+dev=$(ls /dev/ttyACM* /dev/ttyUSB* 2>/dev/null | head -n1); echo "Checking $dev"; fuser -v "$dev"
+```
+
 ### Makefile shortcuts
 ```bash
 # Default port/fqbn
@@ -69,6 +86,11 @@ make upload-old
 # Monitor (uses CrunchLabs-Monitor if available, else picocom)
 make monitor
 make monitor-raw
+
+# Serial helpers
+make port-list     # list available /dev/ttyACM* and /dev/ttyUSB*
+make port-check    # verify $(PORT) exists and is free (returns non-zero if BUSY)
+make port-status   # print FREE/BUSY without failing (for manual checks)
 
 # Override port/fqbn on the fly
 make upload PORT=/dev/ttyUSB1 FQBN=arduino:avr:nano:cpu=atmega328old

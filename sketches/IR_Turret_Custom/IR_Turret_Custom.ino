@@ -222,7 +222,8 @@ void loop() {
 
 void leftMove(int moves){ // function to move left
     for (int i = 0; i < moves; i++){
-        Serial.println("LEFT");
+        Serial.print("LEFT: ");
+        Serial.println(yawPrecision);
         yawServo.write(yawStopSpeed + yawMoveSpeed); // adding the servo speed = 180 (full counterclockwise rotation speed)
         delay(yawPrecision); // stay rotating for a certain number of milliseconds
         yawServo.write(yawStopSpeed); // stop rotating
@@ -233,7 +234,8 @@ void leftMove(int moves){ // function to move left
 
 void rightMove(int moves){ // function to move right
   for (int i = 0; i < moves; i++){
-      Serial.println("RIGHT");
+      Serial.print("RIGHT: ");
+      Serial.println(yawPrecision);
       yawServo.write(yawStopSpeed - yawMoveSpeed); //subtracting the servo speed = 0 (full clockwise rotation speed)
       delay(yawPrecision);
       yawServo.write(yawStopSpeed);
