@@ -36,7 +36,9 @@ void Turret::right(int duration_ms) {
 }
 
 void Turret::up(int duration_ms) {
-  Serial.println("[Turret] UP");
+  Serial.print("[Turret] UP: ");
+  Serial.print(duration_ms);
+  Serial.println(" ms");
   if ((pitchVal + pitchMoveSpeed) < pitchMax) {
     pitchVal = pitchVal + pitchMoveSpeed;
     pitchServo.write(pitchVal);
@@ -45,7 +47,9 @@ void Turret::up(int duration_ms) {
 }
 
 void Turret::down(int duration_ms) {
-  Serial.println("[Turret] DOWN");
+  Serial.print("[Turret] DOWN: ");
+  Serial.print(duration_ms);
+  Serial.println(" ms");
   if ((pitchVal - pitchMoveSpeed) > pitchMin) {
     pitchVal = pitchVal - pitchMoveSpeed;
     pitchServo.write(pitchVal);
@@ -54,14 +58,18 @@ void Turret::down(int duration_ms) {
 }
 
 void Turret::fireOne(int duration_ms) {
-  Serial.println("[Turret] FIRE");
+  Serial.print("[Turret] FIRE: ");
+  Serial.print(duration_ms);
+  Serial.println(" ms");
   rollServo.write(rollStopSpeed + rollMoveSpeed);
   delay(duration_ms);
   rollServo.write(rollStopSpeed);
 }
 
 void Turret::fireAll(int duration_ms) {
-  Serial.println("[Turret] FIRE ALL");
+  Serial.print("[Turret] FIRE ALL: ");
+  Serial.print(duration_ms);
+  Serial.println(" ms");
   rollServo.write(rollStopSpeed + rollMoveSpeed);
   delay(duration_ms);
   rollServo.write(rollStopSpeed);

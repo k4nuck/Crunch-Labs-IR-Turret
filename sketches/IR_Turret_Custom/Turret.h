@@ -27,9 +27,8 @@ public:
   void right(int duration_ms = 150);
   void up(int duration_ms = 50);
   void down(int duration_ms = 50);
-  void fireOne(int duration_ms = 158);   // JB - I think we have a Bug here and we need to increase 
-                                         //      the fire time to 158ms
-  void fireAll(int duration_ms = 948);   // ~6x single fire duration
+  void fireOne(int duration_ms = 220);    // single fire duration
+  void fireAll(int duration_ms = 1350);   // ~6x single fire duration
 
   #pragma endregion Movement Primitives
   
