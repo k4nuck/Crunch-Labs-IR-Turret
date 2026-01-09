@@ -61,17 +61,41 @@ int sonarEnabled = 0; // 0 = disabled, 1 = auto-fire enabled
 unsigned long lastSonarEnabledMillis = 0; // timestamp of last auto-fire event
 int sonarEnableCooldownMs = 2000; // milliseconds to wait between sonar enable/disable toggles
 
+// Fire All duration between shots
+unsigned long lastFireAllShotMillis = 0; // timestamp of last shot in fireAll()
+int fireAllShotDelayMs = 250; // milliseconds between shots in fireAll()
+
 // Objects for hardware drivers
 Turret turret(10, 11, 12);  // Yaw=pin10, Pitch=pin11, Roll=pin12
 Sonar sonar(2, 3);  // Trig=pin2, Echo=pin3
 PirSensor pir(4);  // PIR sensor on pin4
 IRSensor irSensor(9);  // IR receiver on pin9// Timing for IR poll
 
+// Ring queue for commands - handleTasks() can dequeue and process
+struct Command {
+    uint8_t cmd;
+    uint8_t meta; // optional metadata
+};
+RingQueue<Command, 32> commandQueue; // queue size of 32 commands
+
+#define IR_CMD 1 // IR Command Type.  Metadata is the actual command code
+#define SONAR_DISTANCE_CMD 2 // Sonar Distance Command Type.  Metadata is the distance in inches
+#define PIR_MOTION_CMD 3 // PIR Motion Command Type.  Metadata is 1=motion detected, 0=no motion
+#define IR_QUEUE 4 // IR Command Queue Type.  Metadata is unused
+#define SONAR_QUEUE 5 // Sonar Distance Command Queue Type.  Metadata is unused
+#define PIR_QUEUE 6 // PIR Motion Command Queue Type.  Metadata is unused
+
 // Function prototypes
-void handleIRCommands(); //function prototype for handling IR commands
-void handleSonarSensor(); //function prototype for handling Sonar Sensor
+void handleIRCommands(uint8_t cmd); //function prototype for handling IR commands
+void handleIRQueue(); //function prototype for handling IR Queue
+void handleSonarSensorDistance(uint8_t distanceInches); //function prototype for handling Sonar Sensor
+void handleSonarSensorQueue(); //function prototype for handling Sonar Sensor Queue
+void handlePirSensorMovement(uint8_t movementDetected); //function prototype for handling PIR Sensor
+void handlePirSensorQueue(); //function prototype for handling PIR Sensor Queue
+void handleTasks(); //function prototype for handling Tasks based on sensor values
 void shakeHeadYes(int moves = 3); //function prototypes for shakeHeadYes and No for proper compiling
 void shakeHeadNo(int moves = 3);
+bool hasTimeElapsed(unsigned long& lastMillis, int intervalMs); //utility function to check time elapsed
 
 #pragma endregion Parameters and Function Prototypes
 
@@ -105,10 +129,16 @@ void setup() { //this is our setup function - it runs once on start up, and is b
  */
 void loop() {
     // Handle IR commands (poll frequently for responsive input)
-    handleIRCommands(); 
+    handleIRQueue(); 
 
     // Handle sonar sensor & auto-fire logic
-    handleSonarSensor();
+    handleSonarSensorQueue();
+
+    // Handle PIR sensor
+    handlePirSensorQueue();
+
+    // Handle Tasks based on values from sensors and IR commands
+    handleTasks();
 
     // Small delay to avoid overwhelming the CPU
     delay(5);
@@ -121,7 +151,7 @@ void loop() {
 //////////////////////////////////////////////////
 #pragma region IR Commands
 
-void handleIRCommands(){
+void handleIRQueue(){
     /*
     * Check if IR receiver has a new command available
     */
@@ -132,6 +162,12 @@ void handleIRCommands(){
     // Get the decoded command from IR sensor
     uint8_t cmd = irSensor.getCommand();
 
+    // Add command to queue.  metadata is the cmd.
+    commandQueue.enqueue({IR_CMD, cmd});
+
+} //function prototype for handling IR commands
+
+void handleIRCommands(uint8_t cmd){
     /*
     * Business logic: decide what to do based on the command
     */
@@ -175,12 +211,8 @@ void handleIRCommands(){
           break;
 
         case IR_HASH:
-          // JB - Should consider making this more generic for buttons that we do NOT 
-          //      want to trigger too quickly
           // Don't allow toggling sonar too quickly
-          if ((millis() - lastSonarEnabledMillis) > sonarEnableCooldownMs) {
-            lastSonarEnabledMillis = millis();
-
+          if (hasTimeElapsed(lastSonarEnabledMillis, sonarEnableCooldownMs)) {
             if (sonarEnabled == 0){
                 sonarEnabled = 1;
                 Serial.println(">>> AUTO-FIRE MODE: ENABLED <<<");
@@ -192,10 +224,11 @@ void handleIRCommands(){
           }
           break;
     }
-} //function prototype for handling IR commands
+}
+
 #pragma endregion IR Commands
 #pragma region Sonar Sensor
-void handleSonarSensor(){
+void handleSonarSensorQueue(){
 
     // MAke sure sonar auto-fire is enabled
     if (sonarEnabled == 0){
@@ -209,23 +242,34 @@ void handleSonarSensor(){
     // A getDistanceInches() must be called before checking validity
     // JB - Might want to consider if this 2 step process is ideal
     if (!sonar.isValid()) {
-        autoFireConfirmationCount = 0; // reset confirmation counter if out of range
         return; // No echo received within the timeout period
     }
 
+    // Check if there was movement detected by PIR sensor
+    bool movementDetected = pir.isMotionDetected();
+
+    if (!movementDetected) {
+        // Serial.println("No movement detected by PIR; skipping sonar queueing.");
+        return; // No movement detected, skip sonar processing
+    }
+
+    // Add sonar distance to queue.  metadata is the distance in inches.
+    commandQueue.enqueue({SONAR_DISTANCE_CMD, static_cast<uint8_t>(distanceInches)});
+
+} //function prototype for handling Sonar Sensor Queue
+void handleSonarSensorDistance(uint8_t distanceInches){
     // AUTO-FIRE LOGIC: Check if target is in firing range
     if (distanceInches <= autoFireThresholdInches && distanceInches <= autoFireMaxDistanceInches) {
         autoFireConfirmationCount++; // increment confirmation counter
         
         // Fire if confirmations met and cooldown elapsed
         if (autoFireConfirmationCount >= autoFireConfirmationsNeeded && 
-            (millis() - lastAutoFireMillis) > autoFireCooldownMs) {
+            hasTimeElapsed(lastAutoFireMillis, autoFireCooldownMs)) {
             Serial.println(">>> AUTO-FIRE TRIGGERED <<<");
             Serial.print("Distance: ");
             Serial.print(distanceInches);
             Serial.println(" inches");
             turret.fireOne();
-            lastAutoFireMillis = millis();
             autoFireConfirmationCount = 0; // reset after firing
         }
     } else {
@@ -235,6 +279,86 @@ void handleSonarSensor(){
 } //function prototype for handling Sonar Sensor
 
 #pragma endregion Sonar Sensor
+
+#pragma region PIR Sensor
+void handlePirSensorQueue(){
+    
+    //JB - This is needed when we have peripheral PIR Sensors.
+    //     PIR Is tightly coupled with Sonar in this design, so we dont need
+    //     Check pir sensor in this function.
+
+    /*
+    * Check if PIR sensor is triggered
+    */
+    // bool movementDetected = pir.isMotionDetected();
+
+    // Add PIR movement state to queue.  metadata is 1 for motion detected, 0 for no motion.
+    // commandQueue.enqueue({PIR_MOTION_CMD, static_cast<uint8_t>(movementDetected ? 1 : 0)});
+
+} //function prototype for handling PIR Sensor Queue
+void handlePirSensorMovement(uint8_t movementDetected){
+    /*
+    * Check if PIR sensor is triggered
+    */
+    if (movementDetected) {
+        Serial.println(">>> PIR MOTION DETECTED <<<");
+        // JB - Add any additional logic needed when motion is detected
+        //      THIS will be handled when we add peripheral PIR sensors
+    }
+} //function prototype for handling PIR Sensor
+#pragma endregion PIR Sensor
+
+#pragma region TASKS
+void handleTasks(){
+
+  
+    // JB - Some basic logging
+    /*
+    int count = commandQueue.getCount();
+    if(count > 0 ){
+      Serial.print("Handling Tasks... Queue Count: ");
+      Serial.println(count);
+    }*/
+
+    // Warn if queue is full
+    if(commandQueue.isFull()){
+        Serial.println("WARNING: Command Queue is FULL!");
+    }
+
+    /*
+    * Process commands from the command queue
+    */
+    while (!commandQueue.isEmpty()) {
+        Command cmd = commandQueue.dequeue();
+        
+        switch(cmd.cmd) {
+            case IR_CMD:
+                handleIRCommands(cmd.meta);
+                break;
+            case SONAR_DISTANCE_CMD:
+                handleSonarSensorDistance(cmd.meta);
+                break;
+            case PIR_MOTION_CMD:
+                handlePirSensorMovement(cmd.meta);
+                break;
+            case IR_QUEUE:
+                handleIRQueue();
+                break;
+            case SONAR_QUEUE:
+                handleSonarSensorQueue();
+                break;
+            case PIR_QUEUE:
+                handlePirSensorQueue();
+                break;
+            default:
+                Serial.print("Unknown command in queue: ");
+                Serial.println(cmd.cmd);
+                break;
+        }
+    }
+} //function prototype for handling Tasks based on sensor values
+#pragma endregion TASKS
+
 #pragma region FUNCTIONS
 
 // Note: leftMove, rightMove, upMove, downMove, fire, fireAll, homeServos
@@ -274,6 +398,15 @@ void shakeHeadNo(int moves = 3) {
         turret.left(190);
         delay(50); // Pause at starting position
     }
+}
+
+bool hasTimeElapsed(unsigned long& lastMillis, int intervalMs) {
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastMillis >= intervalMs) {
+        lastMillis = currentMillis;
+        return true;
+    }
+    return false;
 }
 #pragma endregion FUNCTIONS
 
