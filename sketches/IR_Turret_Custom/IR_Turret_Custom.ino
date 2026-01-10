@@ -61,6 +61,11 @@ int sonarEnabled = 0; // 0 = disabled, 1 = auto-fire enabled
 unsigned long lastSonarEnabledMillis = 0; // timestamp of last auto-fire event
 int sonarEnableCooldownMs = 2000; // milliseconds to wait between sonar enable/disable toggles
 
+// Auto Locate enable/disable
+int autoLocateEnabled = 0; // 0 = disabled, 1 = enabled
+unsigned long lastAutoLocateEnabledMillis = 0; // timestamp of last auto-locate toggle
+int autoLocateEnableCooldownMs = 2000; // milliseconds to wait between auto-locate toggles
+
 // Fire All duration between shots
 unsigned long lastFireAllShotMillis = 0; // timestamp of last shot in fireAll()
 int fireAllShotDelayMs = 250; // milliseconds between shots in fireAll()
@@ -69,6 +74,8 @@ int fireAllShotDelayMs = 250; // milliseconds between shots in fireAll()
 Turret turret(10, 11, 12);  // Yaw=pin10, Pitch=pin11, Roll=pin12
 Sonar sonar(2, 3);  // Trig=pin2, Echo=pin3
 PirSensor pir(4);  // PIR sensor on pin4
+PirSensor pirLeft(5);  // Left PIR sensor on pin5
+PirSensor pirRight(6);  // Right PIR sensor on pin6
 IRSensor irSensor(9);  // IR receiver on pin9// Timing for IR poll
 
 // Ring queue for commands - handleTasks() can dequeue and process
@@ -84,6 +91,8 @@ RingQueue<Command, 32> commandQueue; // queue size of 32 commands
 #define IR_QUEUE 4 // IR Command Queue Type.  Metadata is unused
 #define SONAR_QUEUE 5 // Sonar Distance Command Queue Type.  Metadata is unused
 #define PIR_QUEUE 6 // PIR Motion Command Queue Type.  Metadata is unused
+#define PIR_LEFT_MOTION_CMD 7 // PIR Left Motion Command Type.  Metadata is 1=motion detected, 0=no motion
+#define PIR_RIGHT_MOTION_CMD  8 // PIR Right Motion Command Type.  Metadata is 1=motion detected, 0=no motion
 
 // Function prototypes
 void handleIRCommands(uint8_t cmd); //function prototype for handling IR commands
@@ -91,6 +100,8 @@ void handleIRQueue(); //function prototype for handling IR Queue
 void handleSonarSensorDistance(uint8_t distanceInches); //function prototype for handling Sonar Sensor
 void handleSonarSensorQueue(); //function prototype for handling Sonar Sensor Queue
 void handlePirSensorMovement(uint8_t movementDetected); //function prototype for handling PIR Sensor
+void handlePirSensorMovementLeft(uint8_t movementDetected); //function prototype for handling PIR Sensor Left
+void handlePirSensorMovementRight(uint8_t movementDetected); //function prototype for handling PIR Sensor Right
 void handlePirSensorQueue(); //function prototype for handling PIR Sensor Queue
 void handleTasks(); //function prototype for handling Tasks based on sensor values
 void shakeHeadYes(int moves = 3); //function prototypes for shakeHeadYes and No for proper compiling
@@ -115,6 +126,8 @@ void setup() { //this is our setup function - it runs once on start up, and is b
     turret.begin();
     sonar.begin();
     pir.begin();
+    pirLeft.begin();
+    pirRight.begin();
     irSensor.begin();
 }
 #pragma endregion SETUP
@@ -210,6 +223,19 @@ void handleIRCommands(uint8_t cmd){
           shakeHeadNo(3);
           break;
 
+        case IR_CMD0:
+          // Dont allow toggling auto locate too quickly
+          if (hasTimeElapsed(lastAutoLocateEnabledMillis, autoLocateEnableCooldownMs)) {
+            if (autoLocateEnabled == 0){
+                autoLocateEnabled = 1;
+                Serial.println(">>> AUTO-LOCATE MODE: ENABLED <<<");
+            }else{
+                autoLocateEnabled = 0;
+                Serial.println(">>> AUTO-LOCATE MODE: DISABLED <<<");
+            }
+          }
+          break;
+
         case IR_HASH:
           // Don't allow toggling sonar too quickly
           if (hasTimeElapsed(lastSonarEnabledMillis, sonarEnableCooldownMs)) {
@@ -282,21 +308,45 @@ void handleSonarSensorDistance(uint8_t distanceInches){
 
 #pragma region PIR Sensor
 void handlePirSensorQueue(){
-    
-    //JB - This is needed when we have peripheral PIR Sensors.
-    //     PIR Is tightly coupled with Sonar in this design, so we dont need
-    //     Check pir sensor in this function.
+
+   if(autoLocateEnabled == 0){
+      return; //skip auto-locate if it's not enabled
+    }
+
+     bool movementDetected = false;
 
     /*
-    * Check if PIR sensor is triggered
+    * Check if PIR sensor is triggered on the left side
     */
-    // bool movementDetected = pir.isMotionDetected();
+    movementDetected = pirLeft.isMotionDetected();
 
+    if(movementDetected){
+        // Add PIR movement state to queue.  metadata is 1 for motion detected, 0 for no motion.
+        commandQueue.enqueue({PIR_LEFT_MOTION_CMD, static_cast<uint8_t>(1)});
+    }
+
+    /*
+    * Check if PIR sensor is triggered on the right side
+    */
+    movementDetected = pirRight.isMotionDetected();
+
+    if(movementDetected){
+        // Add PIR movement state to queue.  metadata is 1 for motion detected, 0 for no motion.
+        commandQueue.enqueue({PIR_RIGHT_MOTION_CMD, static_cast<uint8_t>(1)});
+    }
+    // JB - Original single PIR sensor code - kept for reference
     // Add PIR movement state to queue.  metadata is 1 for motion detected, 0 for no motion.
-    // commandQueue.enqueue({PIR_MOTION_CMD, static_cast<uint8_t>(movementDetected ? 1 : 0)});
+    /*movementDetected = pir.isMotionDetected();
+    if (movementDetected)
+    {
+        commandQueue.enqueue({PIR_MOTION_CMD, static_cast<uint8_t>(1)});
+    }*/
+  
 
 } //function prototype for handling PIR Sensor Queue
 void handlePirSensorMovement(uint8_t movementDetected){
+
+
     /*
     * Check if PIR sensor is triggered
     */
@@ -306,6 +356,28 @@ void handlePirSensorMovement(uint8_t movementDetected){
         //      THIS will be handled when we add peripheral PIR sensors
     }
 } //function prototype for handling PIR Sensor
+void handlePirSensorMovementLeft(uint8_t movementDetected){
+    
+  
+  /*
+    * Check if Left PIR sensor is triggered
+    */
+    if (movementDetected) {
+        Serial.println(">>> LEFT PIR MOTION DETECTED <<<");
+        // JB - Add any additional logic needed when left motion is detected
+    }
+} //function prototype for handling Left PIR Sensor
+void handlePirSensorMovementRight(uint8_t movementDetected){
+
+    
+    /*
+    * Check if Right PIR sensor is triggered
+    */
+    if (movementDetected) {
+        Serial.println(">>> RIGHT PIR MOTION DETECTED <<<");
+        // JB - Add any additional logic needed when right motion is detected
+    }
+} //function prototype for handling Right PIR Sensor
 #pragma endregion PIR Sensor
 
 #pragma region TASKS
@@ -340,6 +412,12 @@ void handleTasks(){
                 break;
             case PIR_MOTION_CMD:
                 handlePirSensorMovement(cmd.meta);
+                break;
+            case PIR_LEFT_MOTION_CMD:
+                handlePirSensorMovementLeft(cmd.meta);
+                break;
+            case PIR_RIGHT_MOTION_CMD:
+                handlePirSensorMovementRight(cmd.meta);
                 break;
             case IR_QUEUE:
                 handleIRQueue();
